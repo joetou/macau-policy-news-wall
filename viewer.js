@@ -45,6 +45,15 @@ if(wall.checksOn&&issues.length){article.classList.add('has-quote-issue');quote.
 else{quote.textContent=text;article.append(quote);if(wall.checksOn&&detail.review_status!=='ai'){const note=document.createElement('p');note.className='quote-unchecked';note.textContent='此段用詞尚未檢查';article.append(note);}}
 }
 
+
+function prioritizeTopicGroups(groups,enabled){
+if(!enabled)return groups;
+const suspicious=entry=>entry.evidence.some(text=>(entry.item.tagging_details||[]).some(d=>d.evidence===text&&d.review_status==='ai'&&d.language_issues?.length));
+const first=[],remaining=[];
+for(const group of groups){const flagged=group.entries.filter(suspicious),normal=group.entries.filter(entry=>!suspicious(entry));if(flagged.length)first.push({...group,entries:flagged,priority:true});if(normal.length)remaining.push({...group,entries:normal,priority:false});}
+return [...first,...remaining];
+}
+
 function renderTopicPanel(data){
 wall.topicData=data;
 const groups=buildTopicGroups(data.items,data.tags||[]),select=$('topicSelect');
@@ -52,7 +61,7 @@ select.replaceChildren();const all=document.createElement('option');all.value=''
 for(const g of groups){const option=document.createElement('option');option.value=g.tag;option.textContent=g.tag+'（'+g.entries.length+'則）';select.append(option);}
 if(wall.topic&&!groups.some(g=>g.tag===wall.topic))wall.topic='';select.value=wall.topic;
 const visible=groups.filter(g=>(!wall.topic||g.tag===wall.topic)&&g.entries.length),box=$('topicGroups');box.replaceChildren();
-let count=0;for(const group of visible){const section=document.createElement('section');section.className='topic-group';const heading=document.createElement('h3');heading.textContent=group.tag;const total=document.createElement('span');total.className='topic-count';total.textContent=group.entries.length+'則報道';heading.append(total);section.append(heading);
+let count=0;for(const group of prioritizeTopicGroups(visible,wall.checksOn)){const section=document.createElement('section');section.className='topic-group';const heading=document.createElement('h3');heading.textContent=group.tag+(group.priority?' · 待核對原文':'');const total=document.createElement('span');total.className='topic-count';total.textContent=group.entries.length+'則報道';heading.append(total);section.append(heading);
 for(const entry of group.entries){count++;const article=document.createElement('article');article.className='topic-excerpt';const title=document.createElement('h4');title.textContent=entry.item.title;article.append(title);for(const text of entry.evidence)appendCheckedQuote(article,entry.item,text);const footer=document.createElement('div');footer.className='topic-excerpt-source';const source=document.createElement('span');source.textContent=entry.item.media_name+' · '+entry.item.published_at.slice(0,16).replace('T',' ')+(entry.item.time_precision==='day'?'（未提供發佈時間）':'');if(entry.item.time_precision==='day')source.textContent=entry.item.media_name+' · '+entry.item.published_at.slice(0,10)+'（未提供時間）';const link=document.createElement('a');link.textContent='閱讀原文 ↗';link.href=safeURL(entry.item.url);link.target='_blank';link.rel='noopener noreferrer';footer.append(source,link);article.append(footer);if(entry.item.source_checked_at){const checked=document.createElement('p');checked.className='source-recheck-note';checked.textContent='最近核對 '+entry.item.source_checked_at.slice(0,16).replace('T',' ')+' · '+entry.item.source_refresh_message;article.append(checked);}section.append(article);}box.append(section);}
 if(!count){const p=document.createElement('p');p.className='empty';p.textContent='此時段未有這個主題的AI原文摘錄。待分析及舊字詞標籤的新聞不會列入。';box.append(p);}
 $('topicScope').textContent='目前日期及時段內，'+visible.length+'個主題、'+count+'條摘錄（同一報道可列入不同主題）。'+(data.pending?'另有'+data.pending+'則新聞標籤待AI分析。':'');
